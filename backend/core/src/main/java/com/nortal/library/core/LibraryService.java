@@ -117,12 +117,7 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return false;
     }
-    int active = 0;
-    for (Book book : bookRepository.findAll()) {
-      if (memberId.equals(book.getLoanedTo())) {
-        active++;
-      }
-    }
+    long active = bookRepository.countByLoanedTo(memberId);
     return active < MAX_LOANS;
   }
 
@@ -138,10 +133,7 @@ public class LibraryService {
   }
 
   public List<Book> overdueBooks(LocalDate today) {
-    return bookRepository.findAll().stream()
-        .filter(b -> b.getLoanedTo() != null)
-        .filter(b -> b.getDueDate() != null && b.getDueDate().isBefore(today))
-        .toList();
+    return bookRepository.findOverdue(today);
   }
 
   public Result extendLoan(String bookId, int days) {
@@ -169,13 +161,10 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return new MemberSummary(false, "MEMBER_NOT_FOUND", List.of(), List.of());
     }
+    List<Book> loans = bookRepository.findByLoanedTo(memberId);
     List<Book> books = bookRepository.findAll();
-    List<Book> loans = new ArrayList<>();
     List<ReservationPosition> reservations = new ArrayList<>();
     for (Book book : books) {
-      if (memberId.equals(book.getLoanedTo())) {
-        loans.add(book);
-      }
       int idx = book.getReservationQueue().indexOf(memberId);
       if (idx >= 0) {
         reservations.add(new ReservationPosition(book.getId(), idx));
