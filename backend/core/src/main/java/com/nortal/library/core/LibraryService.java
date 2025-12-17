@@ -32,24 +32,50 @@ public class LibraryService {
     if (!canMemberBorrow(memberId)) {
       return Result.failure("BORROW_LIMIT");
     }
+
     Book entity = book.get();
+
+    if (entity.getLoanedTo() != null) {
+      return Result.failure("BOOK_UNAVAILABLE");
+    }
+    if (!entity.getReservationQueue().isEmpty()) {
+      String nextMember = entity.getReservationQueue().getFirst();
+      if (!memberId.equals(nextMember)) {
+        return Result.failure("QUEUE_EXISTS");
+      }
+    }
+    if (!entity.getReservationQueue().isEmpty()
+        && memberId.equals(entity.getReservationQueue().getFirst())) {
+      entity.getReservationQueue().removeFirst();
+    }
+
     entity.setLoanedTo(memberId);
     entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
     bookRepository.save(entity);
     return Result.success();
   }
 
-  public ResultWithNext returnBook(String bookId) {
+  public ResultWithNext returnBook(String bookId, String memberId) {
     Optional<Book> book = bookRepository.findById(bookId);
     if (book.isEmpty()) {
       return ResultWithNext.failure();
     }
 
     Book entity = book.get();
+
+    if (entity.getLoanedTo() == null) {
+      return ResultWithNext.failure();
+    }
+
+    if (!entity.getLoanedTo().equals(memberId)) {
+      return ResultWithNext.failure();
+    }
+
     entity.setLoanedTo(null);
     entity.setDueDate(null);
     String nextMember =
-        entity.getReservationQueue().isEmpty() ? null : entity.getReservationQueue().get(0);
+        entity.getReservationQueue().isEmpty() ? null : entity.getReservationQueue().getFirst();
+
     bookRepository.save(entity);
     return ResultWithNext.success(nextMember);
   }
@@ -107,10 +133,7 @@ public class LibraryService {
                 titleContains == null
                     || b.getTitle().toLowerCase().contains(titleContains.toLowerCase()))
         .filter(b -> loanedTo == null || loanedTo.equals(b.getLoanedTo()))
-        .filter(
-            b ->
-                availableOnly == null
-                    || (availableOnly ? b.getLoanedTo() == null : b.getLoanedTo() != null))
+        .filter(b -> availableOnly == null || (availableOnly == (b.getLoanedTo() == null)))
         .toList();
   }
 
