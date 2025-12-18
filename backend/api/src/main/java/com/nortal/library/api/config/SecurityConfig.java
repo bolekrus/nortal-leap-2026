@@ -26,7 +26,9 @@ public class SecurityConfig {
 
   @Bean
   SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-    http.csrf(csrf -> csrf.disable()).cors(Customizer.withDefaults());
+    http.csrf(csrf -> csrf.disable())
+        .cors(Customizer.withDefaults())
+        .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
 
     if (enforceSecurity) {
       http.authorizeHttpRequests(
@@ -75,14 +77,14 @@ public class SecurityConfig {
 
   private static final String PUBLIC_KEY_PEM =
       """
-            -----BEGIN PUBLIC KEY-----
-            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwjpnvCuGBgRov2I2YBff
-            V3D1GqZLOX/74HzxbMGba5IVpAComYzdS0+4jcVu/0xIikN5o+lFOc+L3eI4S8xo
-            ca5JTWmLLyYCkj429/lDQhdWkUCnH2swKFeFZhhpWwsTzEaZRwUwNyiJaX8OmnW+
-            tlc+Rdn/SIB39OX0n4VpgCrj7r0lkfAf6kzSCsrxChIMjix3vz8u6azpIMLfpbHj
-            mWEaTdcETMQlh6QYZDHeosXEzpcaHUBGW1Kd57Lqs+9eTv7mO+wtGlqb4Y4NaPON
-            tD14y8VVAJ8v8b7sRpmke6wJpV6pVPGvVblVzX2WfyI3W92/bbV6uMQGUuL6QqFr
-            hwIDAQAB
-            -----END PUBLIC KEY-----
-            """;
+                    -----BEGIN PUBLIC KEY-----
+                    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwjpnvCuGBgRov2I2YBff
+                    V3D1GqZLOX/74HzxbMGba5IVpAComYzdS0+4jcVu/0xIikN5o+lFOc+L3eI4S8xo
+                    ca5JTWmLLyYCkj429/lDQhdWkUCnH2swKFeFZhhpWwsTzEaZRwUwNyiJaX8OmnW+
+                    tlc+Rdn/SIB39OX0n4VpgCrj7r0lkfAf6kzSCsrxChIMjix3vz8u6azpIMLfpbHj
+                    mWEaTdcETMQlh6QYZDHeosXEzpcaHUBGW1Kd57Lqs+9eTv7mO+wtGlqb4Y4NaPON
+                    tD14y8VVAJ8v8b7sRpmke6wJpV6pVPGvVblVzX2WfyI3W92/bbV6uMQGUuL6QqFr
+                    hwIDAQAB
+                    -----END PUBLIC KEY-----
+                    """;
 }
