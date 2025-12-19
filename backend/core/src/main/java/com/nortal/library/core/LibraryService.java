@@ -67,7 +67,7 @@ public class LibraryService {
       return ResultWithNext.failure();
     }
 
-    if (!entity.getLoanedTo().equals(memberId)) {
+    if (memberId != null && !entity.getLoanedTo().equals(memberId)) {
       return ResultWithNext.failure();
     }
 
