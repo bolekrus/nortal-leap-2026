@@ -151,6 +151,27 @@ class ApiIntegrationTest {
   }
 
   @Test
+  void shouldEnforceBorrowingRulesAndQueueConstraints() {
+    rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m1"), ResultResponse.class);
+
+    ResultResponse doubleLoan =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m2"), ResultResponse.class);
+    assertThat(doubleLoan.ok()).isFalse();
+    assertThat(doubleLoan.reason()).isEqualTo("BOOK_UNAVAILABLE");
+
+    rest.postForObject(url("/api/reserve"), new ReserveRequest("b1", "m2"), ResultResponse.class);
+
+    rest.postForObject(url("/api/return"), new ReturnRequest("b1"), ResultWithNextResponse.class);
+
+    ResultResponse jumpLine =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m3"), ResultResponse.class);
+    assertThat(jumpLine.ok()).isFalse();
+    assertThat(jumpLine.reason()).isEqualTo("QUEUE_EXISTS");
+
+    rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m2"), ResultResponse.class);
+  }
+
+  @Test
   void reserveAndCancelReservation() {
     rest.postForObject(url("/api/borrow"), new BorrowRequest("b2", "m1"), ResultResponse.class);
     ResultResponse reserved =
