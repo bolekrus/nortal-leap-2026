@@ -13,8 +13,6 @@ import com.nortal.library.core.LibraryService;
 import com.nortal.library.core.domain.Book;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -51,11 +49,9 @@ public class LoanController {
   }
 
   @PostMapping("/return")
-  public ResultWithNextResponse returnBook(
-      @RequestBody @Valid ReturnRequest request, @AuthenticationPrincipal Jwt jwt) {
-    String initiatorMemberId = (jwt == null) ? null : jwt.getSubject();
+  public ResultWithNextResponse returnBook(@RequestBody @Valid ReturnRequest request) {
     LibraryService.ResultWithNext result =
-        libraryService.returnBook(request.bookId(), initiatorMemberId);
+        libraryService.returnBook(request.bookId(), request.memberId());
     return new ResultWithNextResponse(result.ok(), result.nextMemberId());
   }
 

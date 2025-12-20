@@ -34,7 +34,7 @@ This repo holds two modules:
    - `DELETE /api/books|members` `{ id }` -> `{ ok, reason? }`
    - `POST /api/borrow` `{ bookId, memberId }` -> `{ ok, reason? }`
    - `POST /api/reserve` `{ bookId, memberId }` -> `{ ok, reason? }`
-   - `POST /api/return` `{ bookId }` -> `{ ok, nextMemberId? }`
+   - `POST /api/return` `{ bookId, memberId? }` -> `{ ok, nextMemberId? }`
    - `GET /api/health` -> `{ status: "ok" }`
 
 ## Assignment (backend)
