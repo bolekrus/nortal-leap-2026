@@ -73,8 +73,13 @@ public class LibraryService {
 
     entity.setLoanedTo(null);
     entity.setDueDate(null);
-    String nextMember =
-        entity.getReservationQueue().isEmpty() ? null : entity.getReservationQueue().getFirst();
+
+    String nextMember = findNextEligibleMember(entity);
+
+    if (nextMember != null) {
+      entity.setLoanedTo(nextMember);
+      entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+    }
 
     bookRepository.save(entity);
     return ResultWithNext.success(nextMember);
@@ -90,6 +95,18 @@ public class LibraryService {
     }
 
     Book entity = book.get();
+
+    if (entity.getReservationQueue().contains(memberId)) {
+      return Result.failure("ALREADY_RESERVED");
+    }
+
+    if (entity.getLoanedTo() == null && canMemberBorrow(memberId)) {
+      entity.setLoanedTo(memberId);
+      entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+      bookRepository.save(entity);
+      return Result.success();
+    }
+
     entity.getReservationQueue().add(memberId);
     bookRepository.save(entity);
     return Result.success();
@@ -246,6 +263,21 @@ public class LibraryService {
     }
     memberRepository.delete(existing.get());
     return Result.success();
+  }
+
+  private String findNextEligibleMember(Book book) {
+    while (!book.getReservationQueue().isEmpty()) {
+      String nextMemberId = book.getReservationQueue().getFirst();
+
+      if (memberRepository.existsById(nextMemberId) && canMemberBorrow(nextMemberId)) {
+        book.getReservationQueue().removeFirst();
+        return nextMemberId;
+      }
+
+      book.getReservationQueue().removeFirst();
+    }
+
+    return null;
   }
 
   public record Result(boolean ok, String reason) {
