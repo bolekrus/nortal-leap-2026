@@ -151,24 +151,61 @@ class ApiIntegrationTest {
   }
 
   @Test
-  void shouldEnforceBorrowingRulesAndQueueConstraints() {
-    rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m1"), ResultResponse.class);
+  void shouldPreventDoubleBorrowingOfSameBook() {
+    ResultResponse firstBorrow =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m1"), ResultResponse.class);
+    assertThat(firstBorrow.ok()).isTrue();
 
-    ResultResponse doubleLoan =
+    ResultResponse secondBorrow =
         rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m2"), ResultResponse.class);
-    assertThat(doubleLoan.ok()).isFalse();
-    assertThat(doubleLoan.reason()).isEqualTo("BOOK_UNAVAILABLE");
+    assertThat(secondBorrow.ok()).isFalse();
+    assertThat(secondBorrow.reason()).isEqualTo("BOOK_UNAVAILABLE");
+  }
 
-    rest.postForObject(url("/api/reserve"), new ReserveRequest("b1", "m2"), ResultResponse.class);
+  @Test
+  void shouldEnforceReservationQueueOrder() {
+    rest.postForObject(url("/api/borrow"), new BorrowRequest("b2", "m1"), ResultResponse.class);
 
-    rest.postForObject(url("/api/return"), new ReturnRequest("b1"), ResultWithNextResponse.class);
+    rest.postForObject(url("/api/reserve"), new ReserveRequest("b2", "m2"), ResultResponse.class);
+    rest.postForObject(url("/api/reserve"), new ReserveRequest("b2", "m3"), ResultResponse.class);
 
-    ResultResponse jumpLine =
-        rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m3"), ResultResponse.class);
-    assertThat(jumpLine.ok()).isFalse();
-    assertThat(jumpLine.reason()).isEqualTo("QUEUE_EXISTS");
+    ResultResponse jumpQueue =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b2", "m3"), ResultResponse.class);
+    assertThat(jumpQueue.ok()).isFalse();
+    assertThat(jumpQueue.reason()).isEqualTo("QUEUE_EXISTS");
 
-    rest.postForObject(url("/api/borrow"), new BorrowRequest("b1", "m2"), ResultResponse.class);
+    ResultWithNextResponse returnResult =
+        rest.postForObject(
+            url("/api/return"), new ReturnRequest("b2", "m1"), ResultWithNextResponse.class);
+    assertThat(returnResult.ok()).isTrue();
+    assertThat(returnResult.nextMemberId()).isEqualTo("m2");
+
+    BookResponse book =
+        rest.getForObject(url("/api/books"), BooksResponse.class).items().stream()
+            .filter(b -> b.id().equals("b2"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(book.loanedTo()).isEqualTo("m2");
+  }
+
+  @Test
+  void shouldOnlyAllowCurrentBorrowerToReturnBook() {
+    rest.postForObject(url("/api/borrow"), new BorrowRequest("b3", "m1"), ResultResponse.class);
+
+    ResultResponse wrongReturn =
+        rest.postForObject(url("/api/return"), new ReturnRequest("b3", "m2"), ResultResponse.class);
+    assertThat(wrongReturn.ok()).isFalse();
+
+    ResultResponse correctReturn =
+        rest.postForObject(url("/api/return"), new ReturnRequest("b3", "m1"), ResultResponse.class);
+    assertThat(correctReturn.ok()).isTrue();
+
+    BookResponse book =
+        rest.getForObject(url("/api/books"), BooksResponse.class).items().stream()
+            .filter(b -> b.id().equals("b3"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(book.loanedTo()).isNull();
   }
 
   @Test

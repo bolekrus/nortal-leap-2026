@@ -34,19 +34,21 @@ public class LibraryService {
     }
 
     Book entity = book.get();
+    var reservationQueue = entity.getReservationQueue();
 
-    if (entity.getLoanedTo() != null) {
-      return Result.failure("BOOK_UNAVAILABLE");
-    }
-    if (!entity.getReservationQueue().isEmpty()) {
-      String nextMember = entity.getReservationQueue().getFirst();
+    if (!reservationQueue.isEmpty()) {
+      String nextMember = reservationQueue.getFirst();
       if (!memberId.equals(nextMember)) {
         return Result.failure("QUEUE_EXISTS");
       }
     }
-    if (!entity.getReservationQueue().isEmpty()
-        && memberId.equals(entity.getReservationQueue().getFirst())) {
-      entity.getReservationQueue().removeFirst();
+
+    if (entity.getLoanedTo() != null) {
+      return Result.failure("BOOK_UNAVAILABLE");
+    }
+
+    if (!reservationQueue.isEmpty() && memberId.equals(reservationQueue.getFirst())) {
+      reservationQueue.removeFirst();
     }
 
     entity.setLoanedTo(memberId);
