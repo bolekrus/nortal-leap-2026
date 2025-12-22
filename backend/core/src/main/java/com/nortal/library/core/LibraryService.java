@@ -98,6 +98,10 @@ public class LibraryService {
 
     Book entity = book.get();
 
+    if (entity.getLoanedTo() != null && entity.getLoanedTo().equals(memberId)) {
+      return Result.failure("ALREADY_LOANED");
+    }
+
     if (entity.getReservationQueue().contains(memberId)) {
       return Result.failure("ALREADY_RESERVED");
     }
