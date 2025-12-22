@@ -29,7 +29,9 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return Result.failure("MEMBER_NOT_FOUND");
     }
-    if (!canMemberBorrow(memberId)) {
+
+    long currentLoans = bookRepository.countByLoanedTo(memberId);
+    if (currentLoans >= MAX_LOANS) {
       return Result.failure("BORROW_LIMIT");
     }
 
@@ -76,15 +78,15 @@ public class LibraryService {
     entity.setLoanedTo(null);
     entity.setDueDate(null);
 
-    String nextMember = findNextEligibleMember(entity);
+    Optional<String> nextMember = findNextEligibleMember(entity);
 
-    if (nextMember != null) {
-      entity.setLoanedTo(nextMember);
+    if (nextMember.isPresent()) {
+      entity.setLoanedTo(nextMember.get());
       entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
     }
 
     bookRepository.save(entity);
-    return ResultWithNext.success(nextMember);
+    return ResultWithNext.success(nextMember.orElse(null));
   }
 
   public Result reserveBook(String bookId, String memberId) {
@@ -106,11 +108,14 @@ public class LibraryService {
       return Result.failure("ALREADY_RESERVED");
     }
 
-    if (entity.getLoanedTo() == null && canMemberBorrow(memberId)) {
-      entity.setLoanedTo(memberId);
-      entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
-      bookRepository.save(entity);
-      return Result.success();
+    if (entity.getLoanedTo() == null) {
+      long currentLoans = bookRepository.countByLoanedTo(memberId);
+      if (currentLoans < MAX_LOANS) {
+        entity.setLoanedTo(memberId);
+        entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+        bookRepository.save(entity);
+        return Result.success();
+      }
     }
 
     entity.getReservationQueue().add(memberId);
@@ -134,14 +139,6 @@ public class LibraryService {
     }
     bookRepository.save(entity);
     return Result.success();
-  }
-
-  public boolean canMemberBorrow(String memberId) {
-    if (!memberRepository.existsById(memberId)) {
-      return false;
-    }
-    long active = bookRepository.countByLoanedTo(memberId);
-    return active < MAX_LOANS;
   }
 
   public List<Book> searchBooks(String titleContains, Boolean availableOnly, String loanedTo) {
@@ -271,19 +268,25 @@ public class LibraryService {
     return Result.success();
   }
 
-  private String findNextEligibleMember(Book book) {
+  private Optional<String> findNextEligibleMember(Book book) {
     while (!book.getReservationQueue().isEmpty()) {
       String nextMemberId = book.getReservationQueue().getFirst();
 
-      if (memberRepository.existsById(nextMemberId) && canMemberBorrow(nextMemberId)) {
+      if (!memberRepository.existsById(nextMemberId)) {
         book.getReservationQueue().removeFirst();
-        return nextMemberId;
+        continue;
+      }
+
+      long currentLoans = bookRepository.countByLoanedTo(nextMemberId);
+      if (currentLoans < MAX_LOANS) {
+        book.getReservationQueue().removeFirst();
+        return Optional.of(nextMemberId);
       }
 
       book.getReservationQueue().removeFirst();
     }
 
-    return null;
+    return Optional.empty();
   }
 
   public record Result(boolean ok, String reason) {
