@@ -500,6 +500,94 @@ class ApiIntegrationTest {
   }
 
   @Test
+  void shouldEnforceBorrowLimitAt5Books() {
+    for (int i = 1; i <= 5; i++) {
+      ResultResponse borrow =
+          rest.postForObject(
+              url("/api/borrow"), new BorrowRequest("b" + i, "m1"), ResultResponse.class);
+      assertThat(borrow.ok()).isTrue();
+    }
+
+    ResultResponse sixthBorrow =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b6", "m1"), ResultResponse.class);
+    assertThat(sixthBorrow.ok()).isFalse();
+    assertThat(sixthBorrow.reason()).isEqualTo("BORROW_LIMIT");
+
+    MemberSummaryResponse summary =
+        rest.getForObject(url("/api/members/m1/summary"), MemberSummaryResponse.class);
+    assertThat(summary.loans()).hasSize(5);
+  }
+
+  @Test
+  void shouldAllowBorrowingAfterReturningWithinLimit() {
+    for (int i = 1; i <= 5; i++) {
+      ResultResponse borrow =
+          rest.postForObject(
+              url("/api/borrow"), new BorrowRequest("b" + i, "m2"), ResultResponse.class);
+      assertThat(borrow.ok()).isTrue();
+    }
+
+    ResultResponse returnResult =
+        rest.postForObject(url("/api/return"), new ReturnRequest("b1", "m2"), ResultResponse.class);
+    assertThat(returnResult.ok()).isTrue();
+
+    ResultResponse newBorrow =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b6", "m2"), ResultResponse.class);
+    assertThat(newBorrow.ok()).isTrue();
+
+    MemberSummaryResponse summary =
+        rest.getForObject(url("/api/members/m2/summary"), MemberSummaryResponse.class);
+    assertThat(summary.loans()).hasSize(5);
+  }
+
+  @Test
+  void shouldPreventReservationFromBypassingBorrowLimit() {
+    for (int i = 1; i <= 5; i++) {
+      rest.postForObject(
+          url("/api/borrow"), new BorrowRequest("b" + i, "m3"), ResultResponse.class);
+    }
+
+    rest.postForObject(url("/api/borrow"), new BorrowRequest("b6", "m4"), ResultResponse.class);
+
+    ResultResponse reserveResult =
+        rest.postForObject(
+            url("/api/reserve"), new ReserveRequest("b6", "m3"), ResultResponse.class);
+    assertThat(reserveResult.ok()).isTrue();
+
+    rest.postForObject(url("/api/return"), new ReturnRequest("b6", "m4"), ResultResponse.class);
+
+    BookResponse book =
+        rest.getForObject(url("/api/books"), BooksResponse.class).items().stream()
+            .filter(b -> b.id().equals("b6"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(book.loanedTo()).isNull();
+    assertThat(book.reservationQueue()).isEmpty();
+  }
+
+  @Test
+  void shouldRejectBorrowWhenAtLimit() {
+    for (int i = 1; i <= 5; i++) {
+      ResultResponse borrow =
+          rest.postForObject(
+              url("/api/borrow"), new BorrowRequest("b" + i, "m1"), ResultResponse.class);
+      assertThat(borrow.ok()).isTrue();
+    }
+
+    ResultResponse limitExceeded =
+        rest.postForObject(url("/api/borrow"), new BorrowRequest("b6", "m1"), ResultResponse.class);
+    assertThat(limitExceeded.ok()).isFalse();
+    assertThat(limitExceeded.reason()).isEqualTo("BORROW_LIMIT");
+
+    BookResponse book6 =
+        rest.getForObject(url("/api/books"), BooksResponse.class).items().stream()
+            .filter(b -> b.id().equals("b6"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(book6.loanedTo()).isNull();
+  }
+
+  @Test
   void memberSummaryShowsLoansAndReservations() {
     rest.postForObject(url("/api/borrow"), new BorrowRequest("b4", "m2"), ResultResponse.class);
     rest.postForObject(url("/api/borrow"), new BorrowRequest("b5", "m1"), ResultResponse.class);
