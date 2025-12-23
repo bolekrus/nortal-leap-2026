@@ -1,0 +1,18 @@
+services:
+  frontend-nortal:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    container_name: nortal-frontend
+    ports:
+      - "4200:4200"
+    restart: unless-stopped
+
+  backend-nortal:
+    build:
+      context: ../backend
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: nortal-backend
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

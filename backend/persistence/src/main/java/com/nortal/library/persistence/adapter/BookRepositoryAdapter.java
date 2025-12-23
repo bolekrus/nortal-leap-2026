@@ -3,6 +3,7 @@ package com.nortal.library.persistence.adapter;
 import com.nortal.library.core.domain.Book;
 import com.nortal.library.core.port.BookRepository;
 import com.nortal.library.persistence.jpa.JpaBookRepository;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
@@ -39,5 +40,20 @@ public class BookRepositoryAdapter implements BookRepository {
   @Override
   public boolean existsById(String id) {
     return jpaRepository.existsById(id);
+  }
+
+  @Override
+  public long countByLoanedTo(final String memberId) {
+    return jpaRepository.countByLoanedTo(memberId);
+  }
+
+  @Override
+  public List<Book> findByLoanedTo(final String memberId) {
+    return jpaRepository.findByLoanedTo(memberId);
+  }
+
+  @Override
+  public List<Book> findOverdue(final LocalDate today) {
+    return jpaRepository.findByLoanedToIsNotNullAndDueDateBefore(today);
   }
 }

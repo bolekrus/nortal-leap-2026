@@ -29,10 +29,30 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return Result.failure("MEMBER_NOT_FOUND");
     }
-    if (!canMemberBorrow(memberId)) {
+
+    long currentLoans = bookRepository.countByLoanedTo(memberId);
+    if (currentLoans >= MAX_LOANS) {
       return Result.failure("BORROW_LIMIT");
     }
+
     Book entity = book.get();
+    var reservationQueue = entity.getReservationQueue();
+
+    if (!reservationQueue.isEmpty()) {
+      String nextMember = reservationQueue.getFirst();
+      if (!memberId.equals(nextMember)) {
+        return Result.failure("QUEUE_EXISTS");
+      }
+    }
+
+    if (entity.getLoanedTo() != null) {
+      return Result.failure("BOOK_UNAVAILABLE");
+    }
+
+    if (!reservationQueue.isEmpty() && memberId.equals(reservationQueue.getFirst())) {
+      reservationQueue.removeFirst();
+    }
+
     entity.setLoanedTo(memberId);
     entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
     bookRepository.save(entity);
@@ -46,12 +66,27 @@ public class LibraryService {
     }
 
     Book entity = book.get();
+
+    if (entity.getLoanedTo() == null) {
+      return ResultWithNext.failure();
+    }
+
+    if (memberId != null && !entity.getLoanedTo().equals(memberId)) {
+      return ResultWithNext.failure();
+    }
+
     entity.setLoanedTo(null);
     entity.setDueDate(null);
-    String nextMember =
-        entity.getReservationQueue().isEmpty() ? null : entity.getReservationQueue().get(0);
+
+    Optional<String> nextMember = findNextEligibleMember(entity);
+
+    if (nextMember.isPresent()) {
+      entity.setLoanedTo(nextMember.get());
+      entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+    }
+
     bookRepository.save(entity);
-    return ResultWithNext.success(nextMember);
+    return ResultWithNext.success(nextMember.orElse(null));
   }
 
   public Result reserveBook(String bookId, String memberId) {
@@ -64,6 +99,25 @@ public class LibraryService {
     }
 
     Book entity = book.get();
+
+    if (entity.getLoanedTo() != null && entity.getLoanedTo().equals(memberId)) {
+      return Result.failure("ALREADY_LOANED");
+    }
+
+    if (entity.getReservationQueue().contains(memberId)) {
+      return Result.failure("ALREADY_RESERVED");
+    }
+
+    if (entity.getLoanedTo() == null) {
+      long currentLoans = bookRepository.countByLoanedTo(memberId);
+      if (currentLoans < MAX_LOANS) {
+        entity.setLoanedTo(memberId);
+        entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+        bookRepository.save(entity);
+        return Result.success();
+      }
+    }
+
     entity.getReservationQueue().add(memberId);
     bookRepository.save(entity);
     return Result.success();
@@ -87,19 +141,6 @@ public class LibraryService {
     return Result.success();
   }
 
-  public boolean canMemberBorrow(String memberId) {
-    if (!memberRepository.existsById(memberId)) {
-      return false;
-    }
-    int active = 0;
-    for (Book book : bookRepository.findAll()) {
-      if (memberId.equals(book.getLoanedTo())) {
-        active++;
-      }
-    }
-    return active < MAX_LOANS;
-  }
-
   public List<Book> searchBooks(String titleContains, Boolean availableOnly, String loanedTo) {
     return bookRepository.findAll().stream()
         .filter(
@@ -107,18 +148,12 @@ public class LibraryService {
                 titleContains == null
                     || b.getTitle().toLowerCase().contains(titleContains.toLowerCase()))
         .filter(b -> loanedTo == null || loanedTo.equals(b.getLoanedTo()))
-        .filter(
-            b ->
-                availableOnly == null
-                    || (availableOnly ? b.getLoanedTo() == null : b.getLoanedTo() != null))
+        .filter(b -> availableOnly == null || (availableOnly == (b.getLoanedTo() == null)))
         .toList();
   }
 
   public List<Book> overdueBooks(LocalDate today) {
-    return bookRepository.findAll().stream()
-        .filter(b -> b.getLoanedTo() != null)
-        .filter(b -> b.getDueDate() != null && b.getDueDate().isBefore(today))
-        .toList();
+    return bookRepository.findOverdue(today);
   }
 
   public Result extendLoan(String bookId, int days) {
@@ -146,13 +181,10 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return new MemberSummary(false, "MEMBER_NOT_FOUND", List.of(), List.of());
     }
+    List<Book> loans = bookRepository.findByLoanedTo(memberId);
     List<Book> books = bookRepository.findAll();
-    List<Book> loans = new ArrayList<>();
     List<ReservationPosition> reservations = new ArrayList<>();
     for (Book book : books) {
-      if (memberId.equals(book.getLoanedTo())) {
-        loans.add(book);
-      }
       int idx = book.getReservationQueue().indexOf(memberId);
       if (idx >= 0) {
         reservations.add(new ReservationPosition(book.getId(), idx));
@@ -234,6 +266,27 @@ public class LibraryService {
     }
     memberRepository.delete(existing.get());
     return Result.success();
+  }
+
+  private Optional<String> findNextEligibleMember(Book book) {
+    while (!book.getReservationQueue().isEmpty()) {
+      String nextMemberId = book.getReservationQueue().getFirst();
+
+      if (!memberRepository.existsById(nextMemberId)) {
+        book.getReservationQueue().removeFirst();
+        continue;
+      }
+
+      long currentLoans = bookRepository.countByLoanedTo(nextMemberId);
+      if (currentLoans < MAX_LOANS) {
+        book.getReservationQueue().removeFirst();
+        return Optional.of(nextMemberId);
+      }
+
+      book.getReservationQueue().removeFirst();
+    }
+
+    return Optional.empty();
   }
 
   public record Result(boolean ok, String reason) {
